@@ -3,16 +3,16 @@ using System.ComponentModel.DataAnnotations;
 
 namespace QuanLyNguoiDungApi.Models
 {
-    // Lớp User đại diện cho một người dùng trong hệ thống và là một bảng trong cơ sở dữ liệu
+    // Lớp User đại diện cho một người dùng trong hệ thống == một bảng trong db
     public class User
     {
-        // Thuộc tính Id sẽ là khóa chính (Primary Key) và tự động tăng trong cơ sở dữ liệu
+        // Thuộc tính Id là khóa chính tự động tăng 
         [Key] // Đánh dấu đây là khóa chính
         public int Id { get; set; }
 
-        // Tên đăng nhập của người dùng
+        // Tên đăng nhập 
         [Required] // Bắt buộc phải có giá trị
-        [MaxLength(50)] // Giới hạn độ dài tối đa 50 ký tự
+        [MaxLength(50)] // Giới hạn độ dài tối đa 
         public string Username { get; set; } = string.Empty; // Gán giá trị mặc định để tránh lỗi null
 
         [Required]

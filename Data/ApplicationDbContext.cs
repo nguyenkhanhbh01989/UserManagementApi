@@ -1,13 +1,13 @@
 ﻿
-using Microsoft.EntityFrameworkCore; // Thư viện chính của Entity Framework Core
-using QuanLyNguoiDungApi.Models; // Import namespace chứa lớp User của chúng ta
+using Microsoft.EntityFrameworkCore; 
+using QuanLyNguoiDungApi.Models; 
 
 namespace QuanLyNguoiDungApi.Data
 {
     // ApplicationDbContext sẽ kế thừa từ DbContext của Entity Framework Core
     public class ApplicationDbContext : DbContext
     {
-        // Constructor để nhận các tùy chọn cấu hình từ bên ngoài (ví dụ: chuỗi kết nối)
+        // Constructor để nhận các tùy chọn cấu hình từ bên ngoài 
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
         }
@@ -17,7 +17,7 @@ namespace QuanLyNguoiDungApi.Data
         // trong cơ sở dữ liệu, với các cột tương ứng với các thuộc tính của lớp User.
         public DbSet<User> Users { get; set; }
 
-        // Bạn có thể ghi đè phương thức OnModelCreating để cấu hình nâng cao cho các model
+        //có thể ghi đè phương thức OnModelCreating để cấu hình nâng cao cho các model
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             // Ví dụ: Đảm bảo Username là duy nhất

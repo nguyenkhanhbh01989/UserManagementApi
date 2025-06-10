@@ -1,10 +1,9 @@
-﻿// Program.cs
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using QuanLyNguoiDungApi.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Microsoft.AspNetCore.Authentication.Cookies; // Thư viện cho Cookie Authentication
+using Microsoft.AspNetCore.Authentication.Cookies;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,15 +16,13 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// --- CẤU HÌNH CỦA CHÚNG TA ---
+// bdau CẤU HÌNH :
 
 // 1. Cấu hình cho Entity Framework Core và SQL Server
-// Đăng ký ApplicationDbContext vào hệ thống Dependency Injection.
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // 2. Cấu hình JWT Authentication
-// Đăng ký dịch vụ xác thực và chỉ định sử dụng JWT Bearer scheme.
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -43,8 +40,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 // 3. Cấu hình Cookie Authentication
-// Thêm Cookie Authentication scheme.
-builder.Services.AddAuthentication() // Thêm vào builder.Services.AddAuthentication() đã có
+builder.Services.AddAuthentication()
 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {
     options.LoginPath = "/api/Auth/login";
@@ -54,14 +50,25 @@ builder.Services.AddAuthentication() // Thêm vào builder.Services.AddAuthentic
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Luôn dùng HTTPS
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+});
+
+// 4. Thêm Authorization service
+builder.Services.AddAuthorization();
+
+// 5. Cấu hình CORS 
+builder.Services.AddCors(options =>
+{
+    
+    options.AddPolicy("AllowSpecificOrigins",
+        builder => builder.WithOrigins("http://localhost:80", "http://localhost:443" , "http://localhost:5173") //các cổng fontend
+                            .AllowAnyHeader()
+                            .AllowAnyMethod()
+                            .AllowCredentials()); // Rất quan trọng cho Cookie/Session authentication với CORS
 });
 
 
-// 4. Thêm Authorization service (Dịch vụ ủy quyền)
-builder.Services.AddAuthorization();
-
-// --- KẾT THÚC CẤU HÌNH CỦA CHÚNG TA ---
+// kt CẤU HÌNH 
 
 var app = builder.Build();
 
@@ -77,8 +84,12 @@ if (app.Environment.IsDevelopment())
 // Bật HTTPS redirection
 app.UseHttpsRedirection();
 
+// Kích hoạt Middleware CORS 
+// Đảm bảo UseCors() đặt trước UseAuthentication() và UseAuthorization()
+app.UseCors("AllowSpecificOrigins"); 
+
+
 // Kích hoạt Middleware xác thực (Authentication) và ủy quyền (Authorization)
-// LƯU Ý QUAN TRỌNG: UseAuthentication() PHẢI ĐỨNG TRƯỚC UseAuthorization()
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -1,5 +1,4 @@
-﻿// Controllers/AuthController.cs
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using QuanLyNguoiDungApi.Data;
 using QuanLyNguoiDungApi.Models;
 using Microsoft.EntityFrameworkCore;
@@ -8,14 +7,14 @@ using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
-using Microsoft.AspNetCore.Authentication; // Thư viện để sử dụng HttpContext.SignInAsync
-using Microsoft.AspNetCore.Authentication.Cookies; // Thư viện để sử dụng CookieAuthenticationDefaults
-using System.Collections.Generic; // Để dùng List<Claim>
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies; 
+using System.Collections.Generic; 
 using System.ComponentModel.DataAnnotations;
 
 namespace QuanLyNguoiDungApi.Controllers
 {
-    // Đánh dấu đây là một Controller API và định nghĩa route mặc định
+    // Đánh dau đây là một Controller API / định nghĩa route mặc định
     [Route("api/[controller]")]
     [ApiController]
     public class AuthController : ControllerBase
@@ -45,7 +44,7 @@ namespace QuanLyNguoiDungApi.Controllers
                 return BadRequest("Tên người dùng đã tồn tại.");
             }
 
-            // Băm mật khẩu trước khi lưu vào cơ sở dữ liệu để bảo mật
+            // Băm mật khẩu trước khi lưu vào cơ sở dữ liệu 
             string passwordHash = BCrypt.Net.BCrypt.HashPassword(userDto.Password);
 
             // Tạo đối tượng User mới
@@ -54,7 +53,7 @@ namespace QuanLyNguoiDungApi.Controllers
                 Username = userDto.Username,
                 PasswordHash = passwordHash,
                 Email = userDto.Email,
-                CreatedAt = DateTime.UtcNow // Ghi lại thời gian tạo
+                CreatedAt = DateTime.UtcNow 
             };
 
             // Thêm người dùng vào DbContext
@@ -98,7 +97,7 @@ namespace QuanLyNguoiDungApi.Controllers
                 claims, CookieAuthenticationDefaults.AuthenticationScheme);
 
             // Đăng nhập người dùng vào scheme CookieAuthenticationDefaults.AuthenticationScheme
-            // Điều này sẽ tạo một cookie và gửi về trình duyệt của người dùng.
+            // tạo một cookie và gửi về trình duyệt của người dùng.
             await HttpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 new ClaimsPrincipal(claimsIdentity));

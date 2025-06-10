@@ -1,0 +1,8 @@
+﻿/// <summary>
+Dùng để mô tả mục đích của phương thức, class hoặc thuộc tính.
+
+/// <param>
+Dùng để mô tả các tham số truyền vào phương thức.
+
+/// <returns>
+Dùng để mô tả giá trị trả về của phương thức.

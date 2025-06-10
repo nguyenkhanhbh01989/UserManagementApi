@@ -1,14 +1,12 @@
-﻿// Controllers/UsersController.cs
-using Microsoft.AspNetCore.Authorization; // Thư viện để sử dụng [Authorize] attribute
-using Microsoft.AspNetCore.Mvc; // Thư viện chính cho Controller
-using System.Security.Claims; // Để truy cập thông tin Claims từ JWT/Cookie
-using QuanLyNguoiDungApi.Data; // Namespace chứa ApplicationDbContext
-using Microsoft.EntityFrameworkCore; // Thư viện để sử dụng các phương thức của EF Core (vd: FindAsync)
-using Microsoft.AspNetCore.Authentication.JwtBearer; // Để chỉ định scheme JWT
-using Microsoft.AspNetCore.Authentication.Cookies; // Để chỉ định scheme Cookie
-using Microsoft.AspNetCore.Authentication; // Thư viện để sử dụng HttpContext.SignOutAsync
-using System.ComponentModel.DataAnnotations; // Để sử dụng [Required] trong DTO
-
+﻿using Microsoft.AspNetCore.Authorization; 
+using Microsoft.AspNetCore.Mvc; 
+using System.Security.Claims; 
+using QuanLyNguoiDungApi.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer; 
+using Microsoft.AspNetCore.Authentication.Cookies; 
+using Microsoft.AspNetCore.Authentication;
+using System.ComponentModel.DataAnnotations; 
 namespace QuanLyNguoiDungApi.Controllers
 {
     // Đánh dấu đây là một Controller API và định nghĩa route mặc định
