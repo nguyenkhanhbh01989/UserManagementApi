@@ -11,7 +11,8 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Collections.Generic;
-using QuanLyNguoiDungApi.DTOs; 
+using QuanLyNguoiDungApi.DTOs;
+using QuanLyNguoiDungApi.Services;
 
 namespace QuanLyNguoiDungApi.Controllers
 {
@@ -19,14 +20,15 @@ namespace QuanLyNguoiDungApi.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly ApplicationDbContext _context; // Biến db Context
+        private readonly ApplicationDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly IEmailService _emailService; 
 
-        // Constructor để inject ApplicationDbContext và IConfiguration
-        public AuthController(ApplicationDbContext context, IConfiguration configuration)
+        public AuthController(ApplicationDbContext context, IConfiguration configuration, IEmailService emailService) // CẬP NHẬT CONSTRUCTOR
         {
             _context = context;
             _configuration = configuration;
+            _emailService = emailService; 
         }
 
         /// <summary>
@@ -153,6 +155,117 @@ namespace QuanLyNguoiDungApi.Controllers
             // Đăng xuất khỏi Cookie Authentication scheme
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Ok("Đăng xuất thành công.");
+        }
+
+
+        /// <summary>
+        /// Yêu cầu reset mật khẩu.
+        /// Gửi email chứa token reset mật khẩu đến người dùng.
+        /// </summary>
+        /// <param name="request">Đối tượng chứa email của người dùng.</param>
+        /// <returns>HTTP 200 OK nếu yêu cầu được xử lý, HTTP 400 BadRequest nếu email không tồn tại.</returns>
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+
+            if (user == null)
+            {
+                return Ok("Nếu email tồn tại, một liên kết đặt lại mật khẩu đã được gửi đi.");
+            }
+
+            // Tạo một token reset mật khẩu duy nhất
+            var token = Guid.NewGuid().ToString("N"); // Tạo GUID và loại bỏ dấu gạch ngang
+            var expiresAt = DateTime.UtcNow.AddHours(1);
+
+            var passwordResetToken = new PasswordResetToken
+            {
+                UserId = user.Id,
+                Token = token,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = expiresAt,
+                IsUsed = false
+            };
+
+            // Xóa các token cũ chưa sử dụng của người dùng này 
+            var existingTokens = await _context.PasswordResetTokens
+                                               .Where(t => t.UserId == user.Id && !t.IsUsed && t.ExpiresAt > DateTime.UtcNow)
+                                               .ToListAsync();
+            _context.PasswordResetTokens.RemoveRange(existingTokens);
+
+            _context.PasswordResetTokens.Add(passwordResetToken);
+            await _context.SaveChangesAsync();
+
+            // Xây dựng liên kết reset mật khẩu
+            // ví dụ: "https://yourfrontend.com/reset-password?email={user.Email}&token={token}"
+            var resetLink = Url.Action(nameof(ResetPasswordConfirm), "Auth", new { email = user.Email, token = token }, Request.Scheme);
+            // var resetLink = $"http://localhost:5000/reset-password?email={user.Email}&token={token}";
+
+            var subject = "Đặt lại mật khẩu của bạn";
+            var message = $"Chào {user.Username},<br/><br/>" +
+                          $"Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:<br/>" +
+                          $"<a href='{resetLink}'>Đặt lại mật khẩu</a><br/><br/>" +
+                          $"Liên kết này sẽ hết hạn trong 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.<br/><br/>" +
+                          $"Trân trọng,<br/>" +
+                          $"Lần sau nhớ mk nhé cu.";
+
+            // Gửi email
+            try
+            {
+                await _emailService.SendEmailAsync(user.Email!, subject, message);
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi gửi email nhưng vẫn trả về OK để tránh lộ thông tin
+                Console.WriteLine($"Error sending email: {ex.Message}");
+                // return StatusCode(500, "Có lỗi xảy ra khi gửi email đặt lại mật khẩu."); // Chỉ trả về khi muốn lộ lỗi gửi email
+            }
+
+            return Ok("Nếu email tồn tại, một liên kết đặt lại mật khẩu đã được gửi đi.");
+        }
+
+        /// <summary>
+        /// Xác nhận và đặt mật khẩu mới sau khi người dùng đã yêu cầu reset.
+        /// </summary>
+        /// <param name="request">Đối tượng chứa Email, Token và NewPassword.</param>
+        /// <returns>HTTP 200 OK nếu mật khẩu được đặt lại thành công, hoặc HTTP 400 BadRequest/404 Not Found nếu lỗi.</returns>
+        [HttpPost("reset-password-confirm")]
+        public async Task<IActionResult> ResetPasswordConfirm([FromBody] ResetPasswordConfirmDto request)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            if (user == null)
+            {
+                return NotFound("Người dùng không tồn tại.");
+            }
+
+            // Tìm token hợp lệ
+            var tokenEntry = await _context.PasswordResetTokens
+                                           .Where(t => t.UserId == user.Id && t.Token == request.Token)
+                                           .OrderByDescending(t => t.CreatedAt) // Lấy token mới nhất nếu có nhiều
+                                           .FirstOrDefaultAsync();
+
+            if (tokenEntry == null)
+            {
+                return BadRequest("Token không hợp lệ hoặc không tìm thấy.");
+            }
+
+            if (tokenEntry.IsUsed)
+            {
+                return BadRequest("Token đã được sử dụng.");
+            }
+
+            if (tokenEntry.ExpiresAt < DateTime.UtcNow)
+            {
+                return BadRequest("Token đã hết hạn.");
+            }
+
+            // Mọi thứ hợp lệ, đặt lại mật khẩu
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            tokenEntry.IsUsed = true; 
+
+            await _context.SaveChangesAsync();
+
+            return Ok("Mật khẩu của bạn đã được đặt lại thành công.");
         }
 
         /// <summary>

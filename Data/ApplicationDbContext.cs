@@ -1,6 +1,6 @@
 ﻿// Data/ApplicationDbContext.cs
 using Microsoft.EntityFrameworkCore;
-using QuanLyNguoiDungApi.Models; 
+using QuanLyNguoiDungApi.Models;
 
 namespace QuanLyNguoiDungApi.Data
 {
@@ -14,6 +14,7 @@ namespace QuanLyNguoiDungApi.Data
         public DbSet<User> Users { get; set; } = null!;
         public DbSet<Role> Roles { get; set; } = null!;
         public DbSet<UserRole> UserRoles { get; set; } = null!;
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; } = null!;
 
         // Phương thức này được gọi khi mô hình đang được tạo
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -23,7 +24,7 @@ namespace QuanLyNguoiDungApi.Data
             // Cấu hình cho bảng User
             modelBuilder.Entity<User>(entity =>
             {
-                entity.HasIndex(e => e.Username).IsUnique(); // Username ko trùng 
+                entity.HasIndex(e => e.Username).IsUnique(); // Username ko trùng
             });
 
             // CẤU HÌNH MỐI QUAN HỆ NHIỀU-NHIỀU GIỮA USER VÀ ROLE QUA USERROLE
@@ -45,8 +46,20 @@ namespace QuanLyNguoiDungApi.Data
                       .OnDelete(DeleteBehavior.Cascade); // Khi Role bị xóa, các UserRole liên quan cũng bị xóa
             });
 
+            //  HÌNH MỐI QUAN HỆ CHO PasswordResetToke
+            modelBuilder.Entity<PasswordResetToken>(entity =>
+            {
+                // Định nghĩa khóa ngoại tới bảng User
+                entity.HasOne(prt => prt.User)
+                      .WithMany()
+                      .HasForeignKey(prt => prt.UserId)
+                      .OnDelete(DeleteBehavior.Cascade); // Xóa token nếu người dùng bị xóa
 
-            //them dữ liệu sẵn 
+                //index cho cột Token để tối ưu tìm kiếm
+                entity.HasIndex(prt => prt.Token).IsUnique();
+            });
+
+            // Thêm dữ liệu sẵn
             modelBuilder.Entity<Role>().HasData(
                 new Role { Id = 1, Name = "Admin" },
                 new Role { Id = 2, Name = "User" }

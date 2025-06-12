@@ -9,7 +9,9 @@ D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\QuanLyNguoiDungApi.pdb
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Azure.Core.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Azure.Identity.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\BCrypt.Net-Next.dll
+D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\BouncyCastle.Cryptography.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Humanizer.dll
+D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\MailKit.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Microsoft.AspNetCore.OpenApi.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Microsoft.Bcl.AsyncInterfaces.dll
@@ -47,6 +49,7 @@ D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Microsoft.IdentityModel.Toke
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Microsoft.OpenApi.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Microsoft.SqlServer.Server.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Microsoft.Win32.SystemEvents.dll
+D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\MimeKit.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Mono.TextTemplating.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Swashbuckle.AspNetCore.Swagger.dll
 D:\.Net core C#\QuanLyNguoiDungApi\bin\Debug\net9.0\Swashbuckle.AspNetCore.SwaggerGen.dll

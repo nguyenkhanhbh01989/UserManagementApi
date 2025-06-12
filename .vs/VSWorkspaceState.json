@@ -6,8 +6,9 @@
     "\\Data",
     "\\DTOs",
     "\\Migrations",
-    "\\Models"
+    "\\Models",
+    "\\Services"
   ],
-  "SelectedNode": "\\DTOs\\AdminDTOs.cs",
+  "SelectedNode": "\\Controllers\\AuthController.cs",
   "PreviewInSolutionExplorer": false
 }
