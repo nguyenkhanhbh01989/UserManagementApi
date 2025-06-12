@@ -6,7 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer; 
 using Microsoft.AspNetCore.Authentication.Cookies; 
 using Microsoft.AspNetCore.Authentication;
-using System.ComponentModel.DataAnnotations; 
+using System.ComponentModel.DataAnnotations;
+using QuanLyNguoiDungApi.DTOs;
+
 namespace QuanLyNguoiDungApi.Controllers
 {
     // Đánh dấu đây là một Controller API và định nghĩa route mặc định
@@ -263,40 +265,4 @@ namespace QuanLyNguoiDungApi.Controllers
         }
     }
 
-    // --- DTO (Data Transfer Object) để trả về thông tin chi tiết người dùng an toàn ---
-    // Được sử dụng bởi GetCurrentUser()
-    public class UserDetailsDto
-    {
-        public int Id { get; set; }
-        public string Username { get; set; } = string.Empty;
-        public string? Email { get; set; }
-        public DateTime CreatedAt { get; set; }
-    }
-
-    // --- DTO cho việc cập nhật thông tin người dùng ---
-    // Được sử dụng bởi UpdateCurrentUser()
-    public class UserUpdateDto
-    {
-        public string? Username { get; set; } // Cho phép null nếu không muốn cập nhật username
-        public string? Email { get; set; }    // Cho phép null nếu không muốn cập nhật email
-    }
-
-    // --- DTO cho việc thay đổi mật khẩu ---
-    // Được sử dụng bởi ChangePassword()
-    public class ChangePasswordDto
-    {
-        [Required(ErrorMessage = "Mật khẩu cũ là bắt buộc.")]
-        public string OldPassword { get; set; } = string.Empty;
-        [Required(ErrorMessage = "Mật khẩu mới là bắt buộc.")]
-        public string NewPassword { get; set; } = string.Empty;
-    }
-
-    // --- DTO MỚI: Để trả về danh sách người dùng (chỉ các trường an toàn) ---
-    // Được sử dụng bởi GetAllUsers()
-    public class UserDetailsForListDto
-    {
-        public int Id { get; set; }
-        public string Username { get; set; } = string.Empty;
-        public string? Email { get; set; }
-    }
 }

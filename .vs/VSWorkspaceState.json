@@ -1,9 +1,13 @@
 {
   "ExpandedNodes": [
     "",
+    "\\bin",
+    "\\Controllers",
     "\\Data",
+    "\\DTOs",
+    "\\Migrations",
     "\\Models"
   ],
-  "SelectedNode": "\\Program.cs",
+  "SelectedNode": "\\DTOs\\AdminDTOs.cs",
   "PreviewInSolutionExplorer": false
 }

@@ -152,6 +152,7 @@ D:\.Net core C#\QuanLyNguoiDungApi\obj\Debug\net9.0\QuanLyNguoiDungApi.AssemblyI
 D:\.Net core C#\QuanLyNguoiDungApi\obj\Debug\net9.0\QuanLyNguoiDungApi.csproj.CoreCompileInputs.cache
 D:\.Net core C#\QuanLyNguoiDungApi\obj\Debug\net9.0\QuanLyNguoiDungApi.MvcApplicationPartsAssemblyInfo.cs
 D:\.Net core C#\QuanLyNguoiDungApi\obj\Debug\net9.0\QuanLyNguoiDungApi.MvcApplicationPartsAssemblyInfo.cache
+D:\.Net core C#\QuanLyNguoiDungApi\obj\Debug\net9.0\QuanLyNguoiDungApi.sourcelink.json
 D:\.Net core C#\QuanLyNguoiDungApi\obj\Debug\net9.0\scopedcss\bundle\QuanLyNguoiDungApi.styles.css
 D:\.Net core C#\QuanLyNguoiDungApi\obj\Debug\net9.0\staticwebassets.build.json
 D:\.Net core C#\QuanLyNguoiDungApi\obj\Debug\net9.0\staticwebassets.development.json

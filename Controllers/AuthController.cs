@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿// Controllers/AuthController.cs
+using Microsoft.AspNetCore.Mvc;
 using QuanLyNguoiDungApi.Data;
 using QuanLyNguoiDungApi.Models;
 using Microsoft.EntityFrameworkCore;
@@ -8,19 +9,18 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies; 
-using System.Collections.Generic; 
-using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Collections.Generic;
+using QuanLyNguoiDungApi.DTOs; 
 
 namespace QuanLyNguoiDungApi.Controllers
 {
-    // Đánh dau đây là một Controller API / định nghĩa route mặc định
     [Route("api/[controller]")]
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly ApplicationDbContext _context; // Biến để truy cập Database Context
-        private readonly IConfiguration _configuration; // Biến để truy cập cấu hình từ appsettings.json
+        private readonly ApplicationDbContext _context; // Biến db Context
+        private readonly IConfiguration _configuration;
 
         // Constructor để inject ApplicationDbContext và IConfiguration
         public AuthController(ApplicationDbContext context, IConfiguration configuration)
@@ -30,89 +30,137 @@ namespace QuanLyNguoiDungApi.Controllers
         }
 
         /// <summary>
-        /// Endpoint để đăng ký người dùng mới.
+        /// Endpoint để đăng ký tài khoản người dùng mới.
         /// </summary>
-        /// <param name="userDto">Đối tượng chứa thông tin đăng ký (Username, Password, Email).</param>
-        /// <returns>HTTP 200 OK nếu đăng ký thành công, hoặc HTTP 400 BadRequest nếu có lỗi.</returns>
-        [HttpPost("register")] // Định nghĩa đây là một phương thức POST với route "api/Auth/register"
-        public async Task<IActionResult> Register([FromBody] UserDto userDto)
+        /// <param name="request">Đối tượng chứa thông tin đăng ký (Username, Password, Email).</param>
+        /// <returns>HTTP 200 OK nếu đăng ký thành công, HTTP 400 BadRequest nếu có lỗi.</returns>
+        [HttpPost("register")]
+        public async Task<IActionResult> Register([FromBody] UserRegisterDto request) // Sử dụng UserRegisterDto
         {
-            // Kiểm tra xem người dùng đã tồn tại chưa
-            if (await _context.Users.AnyAsync(u => u.Username == userDto.Username))
+            // Kiểm tra xem Username đã tồn tại chưa
+            if (await _context.Users.AnyAsync(u => u.Username == request.Username))
             {
-                // Trả về lỗi nếu username đã tồn tại
                 return BadRequest("Tên người dùng đã tồn tại.");
             }
 
-            // Băm mật khẩu trước khi lưu vào cơ sở dữ liệu 
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword(userDto.Password);
+            // Băm mật khẩu trước khi lưu trữ
+            string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
             // Tạo đối tượng User mới
             var user = new User
             {
-                Username = userDto.Username,
+                Username = request.Username,
                 PasswordHash = passwordHash,
-                Email = userDto.Email,
-                CreatedAt = DateTime.UtcNow 
+                Email = request.Email,
+                CreatedAt = DateTime.UtcNow // Ghi lại thời gian tạo
             };
 
-            // Thêm người dùng vào DbContext
             _context.Users.Add(user);
-            // Lưu thay đổi vào cơ sở dữ liệu
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(); // <-- QUAN TRỌNG: Lưu người dùng để có Id trước khi gán vai trò
 
-            // Trả về kết quả thành công
+            // --- BẮT ĐẦU: THÊM PHẦN GÁN VAI TRÒ MẶC ĐỊNH LÀ "User" ---
+            var userRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "User");
+            if (userRole == null)
+            {
+                // Xử lý trường hợp không tìm thấy vai trò 'User' (có thể do lỗi seed data)
+                return StatusCode(500, "Lỗi server: Không tìm thấy vai trò 'User' mặc định. Vui lòng liên hệ quản trị viên.");
+            }
+
+            var newUserRole = new UserRole
+            {
+                UserId = user.Id,
+                RoleId = userRole.Id
+            };
+            _context.UserRoles.Add(newUserRole);
+            await _context.SaveChangesAsync(); // <-- QUAN TRỌNG: Lưu UserRole vào DB
+            // --- KẾT THÚC: THÊM PHẦN GÁN VAI TRÒ MẶC ĐỊNH ---
+
             return Ok("Đăng ký thành công!");
         }
 
         /// <summary>
-        /// Endpoint để đăng nhập người dùng và tạo JWT / Cookie Session.
+        /// Endpoint để đăng nhập người dùng.
+        /// Cấp JWT và Cookie Session khi đăng nhập thành công.
         /// </summary>
-        /// <param name="userDto">Đối tượng chứa thông tin đăng nhập (Username, Password).</param>
-        /// <returns>HTTP 200 OK với JWT nếu đăng nhập thành công, hoặc HTTP 401 Unauthorized nếu thất bại.</returns>
-        [HttpPost("login")] // Định nghĩa đây là một phương thức POST với route "api/Auth/login"
-        public async Task<IActionResult> Login([FromBody] UserDto userDto)
+        /// <param name="request">Đối tượng chứa thông tin đăng nhập (Username, Password).</param>
+        /// <returns>HTTP 200 OK với JWT, hoặc HTTP 400 BadRequest nếu thông tin không đúng.</returns>
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] UserLoginDto request) // Sử dụng UserLoginDto
         {
-            // Tìm người dùng trong cơ sở dữ liệu dựa trên tên đăng nhập
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == userDto.Username);
+            // Tìm người dùng trong cơ sở dữ liệu và tải các vai trò liên quan
+            var user = await _context.Users
+                                     .Include(u => u.UserRoles)! // Đảm bảo tải các vai trò liên quan
+                                     .ThenInclude(ur => ur.Role) // Đảm bảo tải thông tin chi tiết về vai trò
+                                     .FirstOrDefaultAsync(u => u.Username == request.Username);
 
-            // Kiểm tra nếu không tìm thấy người dùng hoặc mật khẩu không đúng
-            if (user == null || !BCrypt.Net.BCrypt.Verify(userDto.Password, user.PasswordHash))
+            if (user == null)
             {
-                return Unauthorized("Tên đăng nhập hoặc mật khẩu không đúng.");
+                return BadRequest("Tên người dùng hoặc mật khẩu không đúng.");
             }
 
-            // 1. Tạo JWT (cho các client không dùng session, ví dụ: mobile, SPA)
-            var jwtToken = GenerateJwtToken(user);
+            if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            {
+                return BadRequest("Tên người dùng hoặc mật khẩu không đúng.");
+            }
 
-            // 2. Tạo ClaimsPrincipal và đăng nhập bằng Cookie (cho các client dùng session, ví dụ: trình duyệt)
+            if (!user.IsActive)
+            {
+                return Unauthorized("Tài khoản của bạn đã bị vô hiệu hóa.");
+            }
+
+           
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()), // ID của người dùng
-                new Claim(ClaimTypes.Name, user.Username), // Tên đăng nhập của người dùng
-                new Claim("UserEmail", user.Email ?? string.Empty) // Thêm email nếu có
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Name, user.Username)
+              //them neu cần 
             };
 
-            var claimsIdentity = new ClaimsIdentity(
-                claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            // Thêm vai trò vào claims
+            if (user.UserRoles != null)
+            {
+                foreach (var userRole in user.UserRoles)
+                {
+                    claims.Add(new Claim(ClaimTypes.Role, userRole.Role.Name));
+                }
+            }
+            // --- KẾT THÚC: CẬP NHẬT CLAIMS ---
 
-            // Đăng nhập người dùng vào scheme CookieAuthenticationDefaults.AuthenticationScheme
-            // tạo một cookie và gửi về trình duyệt của người dùng.
-            await HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                new ClaimsPrincipal(claimsIdentity));
+            // Tạo và cấp JWT (truyền claims đã có vai trò)
+            var token = GenerateJwtToken(claims);
 
-            // Trả về cả JWT và thông báo đăng nhập thành công
-            // Client có thể chọn dùng JWT hoặc dựa vào cookie đã được set
-            return Ok(new { Token = jwtToken, Message = "Đăng nhập thành công!" });
+            // Tạo và cấp Cookie Session (truyền claims đã có vai trò)
+            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var authProperties = new AuthenticationProperties
+            {
+                IsPersistent = true, // Lưu cookie ngay cả khi đóng trình duyệt
+                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30), // Hạn sử dụng của cookie
+                AllowRefresh = true // Cho phép refresh cookie khi hết hạn một phần
+            };
+
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(claimsIdentity), authProperties);
+
+            return Ok(new { Token = token, Message = "Đăng nhập thành công!" });
+        }
+
+        /// <summary>
+        /// Endpoint để người dùng đăng xuất.
+        /// </summary>
+        /// <returns>HTTP 200 OK nếu đăng xuất thành công.</returns>
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            // Đăng xuất khỏi Cookie Authentication scheme
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return Ok("Đăng xuất thành công.");
         }
 
         /// <summary>
         /// Phương thức nội bộ để tạo JWT cho người dùng.
         /// </summary>
-        /// <param name="user">Đối tượng User đã đăng nhập thành công.</param>
+        /// <param name="claims">Danh sách các claims của người dùng.</param>
         /// <returns>Chuỗi JWT.</returns>
-        private string GenerateJwtToken(User user)
+        private string GenerateJwtToken(List<Claim> claims) // Đã sửa để nhận List<Claim>
         {
             var jwtKey = _configuration["Jwt:Key"];
             if (string.IsNullOrEmpty(jwtKey))
@@ -123,18 +171,12 @@ namespace QuanLyNguoiDungApi.Controllers
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-            var claims = new[]
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Username)
-            };
-
             var issuer = _configuration["Jwt:Issuer"];
             var audience = _configuration["Jwt:Audience"];
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(claims),
+                Subject = new ClaimsIdentity(claims), // Sử dụng claims đã được truyền vào
                 Expires = DateTime.UtcNow.AddHours(1), // Token hết hạn sau 1 giờ
                 Issuer = issuer,
                 Audience = audience,
@@ -145,17 +187,15 @@ namespace QuanLyNguoiDungApi.Controllers
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
-    }
 
-    // --- DTO (Data Transfer Object) cho Đăng ký/Đăng nhập ---
-    public class UserDto
-    {
-        [Required]
-        public string Username { get; set; } = string.Empty;
-
-        [Required]
-        public string Password { get; set; } = string.Empty;
-
-        public string? Email { get; set; }
+        /// <summary>
+        /// Endpoint để kiểm tra quyền truy cập khi bị từ chối.
+        /// </summary>
+        [HttpGet("accessdenied")]
+        public IActionResult AccessDenied()
+        {
+            // Trả về Forbid để báo hiệu rằng người dùng đã xác thực nhưng không có quyền.
+            return Forbid("Bạn không có quyền truy cập tài nguyên này.");
+        }
     }
 }
