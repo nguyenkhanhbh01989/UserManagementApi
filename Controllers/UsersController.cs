@@ -1,29 +1,31 @@
-﻿using Microsoft.AspNetCore.Authorization; 
-using Microsoft.AspNetCore.Mvc; 
-using System.Security.Claims; 
+﻿// Controllers/UsersController.cs
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using QuanLyNguoiDungApi.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer; 
-using Microsoft.AspNetCore.Authentication.Cookies; 
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
 using System.ComponentModel.DataAnnotations;
 using QuanLyNguoiDungApi.DTOs;
+using Microsoft.Extensions.Logging; 
 
 namespace QuanLyNguoiDungApi.Controllers
 {
     // Đánh dấu đây là một Controller API và định nghĩa route mặc định
     [Route("api/[controller]")]
     [ApiController]
-    // Mặc định không áp dụng [Authorize] cho toàn bộ Controller để chúng ta có thể
-    // chỉ định scheme cụ thể cho từng phương thức (cookie hoặc JWT).
     public class UsersController : ControllerBase
     {
-        private readonly ApplicationDbContext _context; // Biến để truy cập Database Context
+        private readonly ApplicationDbContext _context; 
+        private readonly ILogger<UsersController> _logger; // 
 
-        // Constructor để inject ApplicationDbContext
-        public UsersController(ApplicationDbContext context)
+        // Constructor để inject ApplicationDbContext và ILogger
+        public UsersController(ApplicationDbContext context, ILogger<UsersController> logger) 
         {
             _context = context;
+            _logger = logger;
         }
 
         /// <summary>
@@ -33,29 +35,28 @@ namespace QuanLyNguoiDungApi.Controllers
         /// </summary>
         /// <returns>HTTP 200 OK cùng với thông tin người dùng an toàn.</returns>
         [HttpGet("me")]
-        // Chỉ chấp nhận xác thực bằng Cookie Authentication cho endpoint này.
         [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
         public async Task<IActionResult> GetCurrentUser()
         {
-            // Lấy ID người dùng từ ClaimsPrincipal (được tạo từ Cookie đã xác thực)
+            _logger.LogInformation("Yêu cầu lấy thông tin người dùng hiện tại.");
+
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null)
             {
-                // Trường hợp hiếm xảy ra nếu cookie hợp lệ nhưng không có ID
+                _logger.LogWarning("Không tìm thấy ID người dùng trong phiên khi lấy thông tin người dùng hiện tại.");
                 return Unauthorized("Không tìm thấy ID người dùng trong phiên.");
             }
             int userId = int.Parse(userIdClaim.Value);
 
-            // Truy vấn database để lấy toàn bộ thông tin người dùng.
             var user = await _context.Users.FindAsync(userId);
 
             if (user == null)
             {
-                // Trường hợp hiếm nếu người dùng bị xóa sau khi đăng nhập
+                _logger.LogError("Người dùng với ID '{UserId}' không tồn tại trong DB dù có phiên hợp lệ.", userId);
                 return NotFound("Người dùng không tồn tại.");
             }
 
-            // Trả về DTO an toàn, KHÔNG BAO GỒM PASSWORDHASH
+            _logger.LogInformation("Đã lấy thông tin người dùng hiện tại thành công cho ID: '{UserId}'.", userId);
             return Ok(new UserDetailsDto
             {
                 Id = user.Id,
@@ -76,51 +77,67 @@ namespace QuanLyNguoiDungApi.Controllers
         [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
         public async Task<IActionResult> UpdateCurrentUser([FromBody] UserUpdateDto updateDto)
         {
-            // Lấy ID người dùng từ cookie session đã xác thực
+            _logger.LogInformation("Yêu cầu cập nhật thông tin người dùng hiện tại.");
+
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null)
             {
+                _logger.LogWarning("Không tìm thấy ID người dùng trong phiên khi cập nhật thông tin.");
                 return Unauthorized("Không tìm thấy ID người dùng trong phiên.");
             }
             int userId = int.Parse(userIdClaim.Value);
 
-            // Tìm người dùng trong cơ sở dữ liệu
             var user = await _context.Users.FindAsync(userId);
             if (user == null)
             {
+                _logger.LogError("Người dùng với ID '{UserId}' không tồn tại trong DB khi cập nhật thông tin.", userId);
                 return NotFound("Người dùng không tồn tại.");
             }
 
-            // Cập nhật thông tin Username nếu được cung cấp và có thay đổi
+            // Ghi lại thông tin cũ trước khi cập nhật
+            _logger.LogInformation("Thông tin người dùng hiện tại (ID: {UserId}) trước cập nhật: Username='{UsernameCu}', Email='{EmailCu}'.",
+                userId, user.Username, user.Email);
+
+            bool changed = false;
             if (!string.IsNullOrEmpty(updateDto.Username) && user.Username != updateDto.Username)
             {
-                // Kiểm tra nếu tên người dùng mới đã tồn tại
                 if (await _context.Users.AnyAsync(u => u.Username == updateDto.Username && u.Id != userId))
                 {
+                    _logger.LogWarning("Cập nhật thất bại: Tên người dùng '{UsernameMoi}' đã tồn tại cho người dùng ID '{UserId}'.", updateDto.Username, userId);
                     return BadRequest("Tên người dùng mới đã tồn tại.");
                 }
                 user.Username = updateDto.Username;
+                changed = true;
+                _logger.LogInformation("Người dùng ID '{UserId}' đã cập nhật Tên người dùng thành '{UsernameMoi}'.", userId, updateDto.Username);
             }
 
-            // Cập nhật Email nếu được cung cấp
-            if (!string.IsNullOrEmpty(updateDto.Email))
+            if (!string.IsNullOrEmpty(updateDto.Email) && user.Email != updateDto.Email)
             {
                 user.Email = updateDto.Email;
+                changed = true;
+                _logger.LogInformation("Người dùng ID '{UserId}' đã cập nhật Email thành '{EmailMoi}'.", userId, updateDto.Email);
+            }
+
+            if (!changed)
+            {
+                _logger.LogInformation("Không có thông tin nào được thay đổi cho người dùng ID '{UserId}'.", userId);
+                return Ok("Không có thông tin nào được cập nhật.");
             }
 
             try
             {
                 await _context.SaveChangesAsync();
+                _logger.LogInformation("Cập nhật thông tin người dùng ID '{UserId}' thành công.", userId);
                 return Ok("Cập nhật thông tin thành công!");
             }
-            catch (DbUpdateConcurrencyException)
+            catch (DbUpdateConcurrencyException ex)
             {
-                // Xử lý xung đột nếu có nhiều request cùng cập nhật (ít xảy ra với một người dùng)
+                _logger.LogError(ex, "Lỗi đồng thời khi cập nhật thông tin người dùng ID '{UserId}'.", userId);
                 return Conflict("Đã xảy ra xung đột khi cập nhật. Vui lòng thử lại.");
             }
             catch (Exception ex)
             {
-                // Ghi log lỗi để debug
+                _logger.LogError(ex, "Lỗi không xác định khi cập nhật thông tin người dùng ID '{UserId}'.", userId);
                 return StatusCode(500, $"Lỗi server: {ex.Message}");
             }
         }
@@ -137,36 +154,47 @@ namespace QuanLyNguoiDungApi.Controllers
         [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto changePasswordDto)
         {
-            // Lấy ID người dùng từ cookie session
+            _logger.LogInformation("Yêu cầu thay đổi mật khẩu cho người dùng hiện tại.");
+
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null)
             {
+                _logger.LogWarning("Không tìm thấy ID người dùng trong phiên khi thay đổi mật khẩu.");
                 return Unauthorized("Không tìm thấy ID người dùng trong phiên.");
             }
             int userId = int.Parse(userIdClaim.Value);
 
-            // Tìm người dùng trong cơ sở dữ liệu
             var user = await _context.Users.FindAsync(userId);
             if (user == null)
             {
+                _logger.LogError("Người dùng với ID '{UserId}' không tồn tại trong DB khi thay đổi mật khẩu.", userId);
                 return NotFound("Người dùng không tồn tại.");
             }
 
-            // Kiểm tra mật khẩu cũ đã nhập với mật khẩu đã băm trong database
             if (!BCrypt.Net.BCrypt.Verify(changePasswordDto.OldPassword, user.PasswordHash))
             {
+                _logger.LogWarning("Thay đổi mật khẩu thất bại cho người dùng ID '{UserId}': Mật khẩu cũ không đúng.", userId);
                 return BadRequest("Mật khẩu cũ không đúng.");
             }
 
-            // Băm mật khẩu mới và cập nhật vào database
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(changePasswordDto.NewPassword);
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Mật khẩu của người dùng ID '{UserId}' đã được thay đổi thành công.", userId);
 
-            // ĐĂNG XUẤT NGƯỜI DÙNG SAU KHI ĐỔI MẬT KHẨU ĐỂ TĂNG CƯỜNG BẢO MẬT
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                // ĐĂNG XUẤT NGƯỜI DÙNG SAU KHI ĐỔI MẬT KHẨU ĐỂ TĂNG CƯỜNG BẢO MẬT
+                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                _logger.LogInformation("Người dùng ID '{UserId}' đã được đăng xuất sau khi đổi mật khẩu.", userId);
 
-            return Ok("Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.");
+                return Ok("Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi không xác định khi thay đổi mật khẩu cho người dùng ID '{UserId}'.", userId);
+                return StatusCode(500, $"Lỗi server: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -178,31 +206,40 @@ namespace QuanLyNguoiDungApi.Controllers
         [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
         public async Task<IActionResult> DeleteCurrentUser()
         {
-            // Lấy ID người dùng từ cookie session
+            _logger.LogInformation("Yêu cầu xóa tài khoản của người dùng hiện tại.");
+
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null)
             {
+                _logger.LogWarning("Không tìm thấy ID người dùng trong phiên khi xóa tài khoản.");
                 return Unauthorized("Không tìm thấy ID người dùng trong phiên.");
             }
             int userId = int.Parse(userIdClaim.Value);
 
-            // Tìm người dùng trong cơ sở dữ liệu
             var user = await _context.Users.FindAsync(userId);
             if (user == null)
             {
+                _logger.LogError("Người dùng với ID '{UserId}' không tồn tại trong DB khi cố gắng xóa tài khoản.", userId);
                 return NotFound("Người dùng không tồn tại."); // Trường hợp hiếm nếu user đã bị xóa
             }
 
-            // Xóa người dùng khỏi DbContext
-            _context.Users.Remove(user);
-            // Lưu thay đổi vào cơ sở dữ liệu
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.Users.Remove(user);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Tài khoản của người dùng ID '{UserId}' đã được xóa thành công.", userId);
 
-            // Đăng xuất người dùng sau khi xóa tài khoản để hủy phiên hiện tại
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                // Đăng xuất người dùng sau khi xóa tài khoản để hủy phiên hiện tại
+                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                _logger.LogInformation("Người dùng ID '{UserId}' đã được đăng xuất sau khi xóa tài khoản.", userId);
 
-            // Trả về HTTP 204: Yêu cầu đã được thực hiện thành công, nhưng không có nội dung để trả về.
-            return NoContent();
+                return NoContent(); // HTTP 204: Yêu cầu đã được thực hiện thành công, nhưng không có nội dung để trả về.
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi không xác định khi xóa tài khoản người dùng ID '{UserId}'.", userId);
+                return StatusCode(500, $"Lỗi server: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -213,20 +250,20 @@ namespace QuanLyNguoiDungApi.Controllers
         /// <param name="id">ID của người dùng cần lấy thông tin.</param>
         /// <returns>HTTP 200 OK với thông tin người dùng, HTTP 404 NotFound nếu không tìm thấy.</returns>
         [HttpGet("{id}")]
-        // Chỉ chấp nhận xác thực bằng JWT Bearer scheme cho endpoint này.
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         public async Task<IActionResult> GetUserById(int id)
         {
-            // Tìm người dùng trong cơ sở dữ liệu bằng ID
+            _logger.LogInformation("Yêu cầu lấy thông tin người dùng với ID: {Id}.", id);
+
             var user = await _context.Users.FindAsync(id);
 
-            // Kiểm tra nếu không tìm thấy người dùng
             if (user == null)
             {
+                _logger.LogWarning("Không tìm thấy người dùng với ID: {Id}.", id);
                 return NotFound($"Không tìm thấy người dùng với ID: {id}");
             }
 
-            // Trả về các thông tin an toàn của người dùng (KHÔNG BAO GỒM PasswordHash)
+            _logger.LogInformation("Đã lấy thông tin người dùng với ID '{Id}' thành công.", id);
             return Ok(new
             {
                 user.Id,
@@ -246,7 +283,8 @@ namespace QuanLyNguoiDungApi.Controllers
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         public async Task<ActionResult<IEnumerable<UserDetailsForListDto>>> GetAllUsers()
         {
-            // Chọn lọc chỉ những trường cần thiết và an toàn để trả về cho mỗi người dùng
+            _logger.LogInformation("Yêu cầu lấy danh sách tất cả người dùng.");
+
             var users = await _context.Users
                                     .Select(u => new UserDetailsForListDto
                                     {
@@ -258,11 +296,12 @@ namespace QuanLyNguoiDungApi.Controllers
 
             if (users == null || !users.Any())
             {
+                _logger.LogInformation("Không có người dùng nào trong hệ thống.");
                 return NotFound("Không có người dùng nào trong hệ thống.");
             }
 
+            _logger.LogInformation("Đã lấy thành công {SoLuongNguoiDung} người dùng.", users.Count);
             return Ok(users);
         }
     }
-
 }

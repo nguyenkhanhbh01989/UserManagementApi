@@ -2,13 +2,14 @@
   "ExpandedNodes": [
     "",
     "\\bin",
+    "\\bin\\Debug",
     "\\Controllers",
     "\\Data",
     "\\DTOs",
-    "\\Migrations",
+    "\\Logs",
+    "\\Middleware",
     "\\Models",
     "\\Services"
   ],
-  "SelectedNode": "\\Controllers\\AuthController.cs",
   "PreviewInSolutionExplorer": false
 }

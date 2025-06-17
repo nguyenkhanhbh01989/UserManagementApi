@@ -5,10 +5,18 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using QuanLyNguoiDungApi.Services;
+using Serilog;
+using QuanLyNguoiDungApi.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls("http://localhost:5019");
+//chcp 65001
 
-// Add services to the container.
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services) 
+    .Enrich.FromLogContext()); 
+
 
 // Đăng ký dịch vụ cho các Controller của API
 builder.Services.AddControllers();
@@ -57,25 +65,34 @@ builder.Services.AddAuthentication()
 // 4. Thêm Authorization service
 builder.Services.AddAuthorization();
 
-// 5. Cấu hình CORS 
+// 5. Cấu hình CORS
 builder.Services.AddCors(options =>
 {
-    
     options.AddPolicy("AllowSpecificOrigins",
-        builder => builder.WithOrigins("http://localhost:80", "http://localhost:443" , "http://localhost:5173") //các cổng fontend
+        builder => builder.WithOrigins("http://localhost:80", "http://localhost:443", "http://localhost:5173") //các cổng fontend
                             .AllowAnyHeader()
                             .AllowAnyMethod()
                             .AllowCredentials()); // Rất quan trọng cho Cookie/Session authentication với CORS
 });
 
-//ĐĂNG KÝ EMAIL SERVICE 
-builder.Services.AddTransient<IEmailService, EmailService>(); // Hoặc AddScoped tùy
+// ĐĂNG KÝ EMAIL SERVICE
+builder.Services.AddTransient<IEmailService, EmailService>(); 
 
-// kt CẤU HÌNH 
+// kt CẤU HÌNH
 
 var app = builder.Build();
+app.UseExceptionHandlingMiddleware(); 
+
+// Đặt middleware xử lý lỗi TẠI ĐÂY (đầu tiên) để nó có thể bắt tất cả các ngoại lệ phát sinh
+app.UseExceptionHandlingMiddleware();
+
 
 // Configure the HTTP request pipeline.
+
+// Đặt middleware ghi log request sau Exception Handling để log được các lỗi nếu có
+app.UseSerilogRequestLogging();
+// --- KẾT THÚC: Serilog Request Logging Middleware ---
+
 
 // Chỉ bật Swagger UI trong môi trường phát triển
 if (app.Environment.IsDevelopment())
@@ -84,12 +101,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Bật HTTPS redirection
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
-// Kích hoạt Middleware CORS 
-// Đảm bảo UseCors() đặt trước UseAuthentication() và UseAuthorization()
-app.UseCors("AllowSpecificOrigins"); 
+// Kích hoạt Middleware CORS
+app.UseCors("AllowSpecificOrigins");
 
 
 // Kích hoạt Middleware xác thực (Authentication) và ủy quyền (Authorization)

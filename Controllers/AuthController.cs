@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Collections.Generic;
 using QuanLyNguoiDungApi.DTOs;
 using QuanLyNguoiDungApi.Services;
+using Microsoft.Extensions.Logging;
 
 namespace QuanLyNguoiDungApi.Controllers
 {
@@ -22,30 +23,42 @@ namespace QuanLyNguoiDungApi.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly IConfiguration _configuration;
-        private readonly IEmailService _emailService; 
+        private readonly IEmailService _emailService;
+        private readonly ILogger<AuthController> _logger; 
 
-        public AuthController(ApplicationDbContext context, IConfiguration configuration, IEmailService emailService) // CẬP NHẬT CONSTRUCTOR
+        public AuthController(ApplicationDbContext context, IConfiguration configuration, IEmailService emailService, ILogger<AuthController> logger) // <-- Constructor đã được cập nhật
         {
             _context = context;
             _configuration = configuration;
-            _emailService = emailService; 
+            _emailService = emailService;
+            _logger = logger;
         }
-
+        // Ví dụ: trong AdminController.cs hoặc một controller khác của bạn
+        // Đặt đoạn code này vào một vị trí thích hợp trong class Controller của bạn
+        [HttpGet("test-global-error")]
+        public IActionResult TestGlobalError()
+        {
+            int x = 0;
+            int y = 1/x; 
+            return Ok();
+        }
         /// <summary>
         /// Endpoint để đăng ký tài khoản người dùng mới.
         /// </summary>
         /// <param name="request">Đối tượng chứa thông tin đăng ký (Username, Password, Email).</param>
         /// <returns>HTTP 200 OK nếu đăng ký thành công, HTTP 400 BadRequest nếu có lỗi.</returns>
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] UserRegisterDto request) // Sử dụng UserRegisterDto
+        public async Task<IActionResult> Register([FromBody] UserRegisterDto request)
         {
-            // Kiểm tra xem Username đã tồn tại chưa
+            _logger.LogInformation("Đang cố gắng đăng ký người dùng: {Username}", request.Username); // Ghi log: Bắt đầu quá trình đăng ký
+
+
             if (await _context.Users.AnyAsync(u => u.Username == request.Username))
             {
+                _logger.LogWarning("Đăng ký không thành công: Tên người dùng '{Username}' đã tồn tại.", request.Username);
                 return BadRequest("Tên người dùng đã tồn tại.");
             }
 
-            // Băm mật khẩu trước khi lưu trữ
             string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
             // Tạo đối tượng User mới
@@ -54,18 +67,19 @@ namespace QuanLyNguoiDungApi.Controllers
                 Username = request.Username,
                 PasswordHash = passwordHash,
                 Email = request.Email,
-                CreatedAt = DateTime.UtcNow // Ghi lại thời gian tạo
+                CreatedAt = DateTime.UtcNow, 
+                IsActive = true 
             };
 
+            // Gán vai trò "User" mặc định 
             _context.Users.Add(user);
-            await _context.SaveChangesAsync(); // <-- QUAN TRỌNG: Lưu người dùng để có Id trước khi gán vai trò
+            await _context.SaveChangesAsync(); 
 
-            // --- BẮT ĐẦU: THÊM PHẦN GÁN VAI TRÒ MẶC ĐỊNH LÀ "User" ---
             var userRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "User");
             if (userRole == null)
             {
-                // Xử lý trường hợp không tìm thấy vai trò 'User' (có thể do lỗi seed data)
-                return StatusCode(500, "Lỗi server: Không tìm thấy vai trò 'User' mặc định. Vui lòng liên hệ quản trị viên.");
+                _logger.LogError("Không tìm thấy vai trò 'User' trong cơ sở dữ liệu khi đăng ký người dùng: {Username}. Vui lòng đảm bảo vai trò 'User' đã được thêm vào.", request.Username); // Ghi log: Không tìm thấy vai trò
+                return StatusCode(500, "Lỗi nội bộ: Không tìm thấy vai trò 'User' mặc định. Vui lòng liên hệ quản trị viên.");
             }
 
             var newUserRole = new UserRole
@@ -74,9 +88,9 @@ namespace QuanLyNguoiDungApi.Controllers
                 RoleId = userRole.Id
             };
             _context.UserRoles.Add(newUserRole);
-            await _context.SaveChangesAsync(); // <-- QUAN TRỌNG: Lưu UserRole vào DB
-            // --- KẾT THÚC: THÊM PHẦN GÁN VAI TRÒ MẶC ĐỊNH ---
+            await _context.SaveChangesAsync(); // Lưu vai trò người dùng
 
+            _logger.LogInformation("User registered successfully: {Username}", request.Username); // Ghi log: Đăng ký thành công
             return Ok("Đăng ký thành công!");
         }
 
@@ -87,35 +101,39 @@ namespace QuanLyNguoiDungApi.Controllers
         /// <param name="request">Đối tượng chứa thông tin đăng nhập (Username, Password).</param>
         /// <returns>HTTP 200 OK với JWT, hoặc HTTP 400 BadRequest nếu thông tin không đúng.</returns>
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] UserLoginDto request) // Sử dụng UserLoginDto
+        public async Task<IActionResult> Login([FromBody] UserLoginDto request)
         {
+            _logger.LogInformation("Cố gắng đăng nhập cho người dùng: {Username}", request.Username); // Ghi log: Bắt đầu đăng nhập
+
             // Tìm người dùng trong cơ sở dữ liệu và tải các vai trò liên quan
             var user = await _context.Users
-                                     .Include(u => u.UserRoles)! // Đảm bảo tải các vai trò liên quan
-                                     .ThenInclude(ur => ur.Role) // Đảm bảo tải thông tin chi tiết về vai trò
+                                     .Include(u => u.UserRoles)!
+                                     .ThenInclude(ur => ur.Role) 
                                      .FirstOrDefaultAsync(u => u.Username == request.Username);
 
             if (user == null)
             {
+                _logger.LogWarning("Đăng nhập không thành công: Không tìm thấy tên người dùng '{Username}'.", request.Username); // Ghi log: Không tìm thấy người dùng
                 return BadRequest("Tên người dùng hoặc mật khẩu không đúng.");
             }
 
             if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             {
+                _logger.LogWarning("đăng nhập không thành công : Do nhập sai mật khẩu cho người dùng tên  '{Username}'", request.Username); // Ghi log: Sai mật khẩu
                 return BadRequest("Tên người dùng hoặc mật khẩu không đúng.");
             }
 
+            // Kiểm tra trạng thái hoạt động của tài khoản
             if (!user.IsActive)
             {
-                return Unauthorized("Tài khoản của bạn đã bị vô hiệu hóa.");
+                _logger.LogWarning("Đăng nhập không thành công : Tài khoản  '{Username}'  đang bị khóa .", request.Username); // Ghi log: Tài khoản bị vô hiệu hóa
+                return Unauthorized("Tài khoản của bạn đã bị vô hiệu hóa, vui lòng liên hệ admin@gmail.com để mở khóa .");
             }
 
-           
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Username)
-              //them neu cần 
+                new Claim(ClaimTypes.Name, user.Username!) // Dùng user.Username! để bỏ cảnh báo null nếu bạn chắc chắn nó không null
             };
 
             // Thêm vai trò vào claims
@@ -123,15 +141,18 @@ namespace QuanLyNguoiDungApi.Controllers
             {
                 foreach (var userRole in user.UserRoles)
                 {
-                    claims.Add(new Claim(ClaimTypes.Role, userRole.Role.Name));
+                    if (userRole.Role != null && !string.IsNullOrEmpty(userRole.Role.Name))
+                    {
+                        claims.Add(new Claim(ClaimTypes.Role, userRole.Role.Name));
+                    }
                 }
             }
-            // --- KẾT THÚC: CẬP NHẬT CLAIMS ---
 
-            // Tạo và cấp JWT (truyền claims đã có vai trò)
+            // Tạo và cấp JWT
             var token = GenerateJwtToken(claims);
 
             // Tạo và cấp Cookie Session (truyền claims đã có vai trò)
+            // Lưu ý: Nếu bạn chỉ dùng JWT cho API thì phần Cookie này có thể không cần thiết
             var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var authProperties = new AuthenticationProperties
             {
@@ -142,6 +163,7 @@ namespace QuanLyNguoiDungApi.Controllers
 
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(claimsIdentity), authProperties);
 
+            _logger.LogInformation("Người dùng'{Username}'  đã đăng  nhập thành công.", request.Username); // Ghi log: Đăng nhập thành công
             return Ok(new { Token = token, Message = "Đăng nhập thành công!" });
         }
 
@@ -152,8 +174,9 @@ namespace QuanLyNguoiDungApi.Controllers
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
-            // Đăng xuất khỏi Cookie Authentication scheme
+
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            _logger.LogInformation("Người dùng đã yêu cầu đăng xuất.đã xóa côkie.");
             return Ok("Đăng xuất thành công.");
         }
 
@@ -167,16 +190,21 @@ namespace QuanLyNguoiDungApi.Controllers
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request)
         {
+            _logger.LogInformation("Có yêu cầu cấp lại mật khẩu từ email: {Email}", request.Email); // Ghi log: Yêu cầu quên mật khẩu
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
 
             if (user == null)
             {
+                // Để tránh lộ thông tin email nào tồn tại, chúng ta luôn trả về OK
+                // nhưng không gửi email nếu email không tồn tại.
+                _logger.LogWarning("Yêu cầu mật khẩu cho emai không tồn tại trong hệ thống: {Email}=>> Không có email được guier đi.", request.Email); 
                 return Ok("Nếu email tồn tại, một liên kết đặt lại mật khẩu đã được gửi đi.");
             }
 
             // Tạo một token reset mật khẩu duy nhất
-            var token = Guid.NewGuid().ToString("N"); // Tạo GUID và loại bỏ dấu gạch ngang
-            var expiresAt = DateTime.UtcNow.AddHours(1);
+            var token = Guid.NewGuid().ToString("N"); // Tạo GUID , bỏ dấu gạch ngang
+            var expiresAt = DateTime.UtcNow.AddHours(1); 
 
             var passwordResetToken = new PasswordResetToken
             {
@@ -187,7 +215,7 @@ namespace QuanLyNguoiDungApi.Controllers
                 IsUsed = false
             };
 
-            // Xóa các token cũ chưa sử dụng của người dùng này 
+            // Xóa các token cũ chưa sử dụng của người dùng này để tránh lộn xộn
             var existingTokens = await _context.PasswordResetTokens
                                                .Where(t => t.UserId == user.Id && !t.IsUsed && t.ExpiresAt > DateTime.UtcNow)
                                                .ToListAsync();
@@ -197,9 +225,8 @@ namespace QuanLyNguoiDungApi.Controllers
             await _context.SaveChangesAsync();
 
             // Xây dựng liên kết reset mật khẩu
-            // ví dụ: "https://yourfrontend.com/reset-password?email={user.Email}&token={token}"
+            // Sử dụng Url.Action để tạo URL động
             var resetLink = Url.Action(nameof(ResetPasswordConfirm), "Auth", new { email = user.Email, token = token }, Request.Scheme);
-            // var resetLink = $"http://localhost:5000/reset-password?email={user.Email}&token={token}";
 
             var subject = "Đặt lại mật khẩu của bạn";
             var message = $"Chào {user.Username},<br/><br/>" +
@@ -207,18 +234,19 @@ namespace QuanLyNguoiDungApi.Controllers
                           $"<a href='{resetLink}'>Đặt lại mật khẩu</a><br/><br/>" +
                           $"Liên kết này sẽ hết hạn trong 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.<br/><br/>" +
                           $"Trân trọng,<br/>" +
-                          $"Lần sau nhớ mk nhé cu.";
+                          $"Hệ thống quản lý người dùng";
 
             // Gửi email
             try
             {
                 await _emailService.SendEmailAsync(user.Email!, subject, message);
+                _logger.LogInformation("Đa gửi emaik cấp kại mật khẩu tới email: {Email}.", user.Email); // Ghi log: Gửi email thành công
             }
             catch (Exception ex)
             {
-                // Log lỗi gửi email nhưng vẫn trả về OK để tránh lộ thông tin
-                Console.WriteLine($"Error sending email: {ex.Message}");
-                // return StatusCode(500, "Có lỗi xảy ra khi gửi email đặt lại mật khẩu."); // Chỉ trả về khi muốn lộ lỗi gửi email
+                _logger.LogError(ex, "Không thể gửi được mail cấp lại mật khẩu tới {Email}.", user.Email); // Ghi log lỗi: Không gửi được email
+               
+                return Ok("Nếu email tồn tại, một liên kết đặt lại mật khẩu đã được gửi đi.");
             }
 
             return Ok("Nếu email tồn tại, một liên kết đặt lại mật khẩu đã được gửi đi.");
@@ -232,9 +260,12 @@ namespace QuanLyNguoiDungApi.Controllers
         [HttpPost("reset-password-confirm")]
         public async Task<IActionResult> ResetPasswordConfirm([FromBody] ResetPasswordConfirmDto request)
         {
+            _logger.LogInformation("Xác nhận đặt lại mật khẩu cho email: {Email}", request.Email); // Ghi log: Bắt đầu xác nhận reset
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
             if (user == null)
             {
+                _logger.LogWarning("Xác nhận đặt lại mật khẩu không thành công: Người dùng '{Email}' không tồn tại.", request.Email); // Ghi log: Người dùng không tồn tại
                 return NotFound("Người dùng không tồn tại.");
             }
 
@@ -246,26 +277,40 @@ namespace QuanLyNguoiDungApi.Controllers
 
             if (tokenEntry == null)
             {
+                _logger.LogWarning("Cấp lại mật khẩu không thành công  cho người dùng có email: '{Email}': Token không đúng .", request.Email); // Ghi log: Token không hợp lệ
                 return BadRequest("Token không hợp lệ hoặc không tìm thấy.");
             }
 
             if (tokenEntry.IsUsed)
             {
+                _logger.LogWarning("Cấp lại mật khẩu không thành công  cho người dùng có email:'{Email}': Token đã được sử dụng.", request.Email); // Ghi log: Token đã sử dụng
                 return BadRequest("Token đã được sử dụng.");
             }
 
             if (tokenEntry.ExpiresAt < DateTime.UtcNow)
             {
+                _logger.LogWarning("Cấp lại mật khẩu không thành công  cho người dùng có email:'{Email}':  Token Đã hết hạn.", request.Email); // Ghi log: Token hết hạn
                 return BadRequest("Token đã hết hạn.");
             }
 
-            // Mọi thứ hợp lệ, đặt lại mật khẩu
+       
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-            tokenEntry.IsUsed = true; 
+            tokenEntry.IsUsed = true; // Đánh dấu token đã được sử dụng
 
             await _context.SaveChangesAsync();
 
+            _logger.LogInformation("Mật khấu của người dùng '{Email}' đã được cấp lại thành công.", request.Email);
             return Ok("Mật khẩu của bạn đã được đặt lại thành công.");
+        }
+
+        /// <summary>
+        /// Endpoint để kiểm tra quyền truy cập khi bị từ chối.
+        /// </summary>
+        [HttpGet("accessdenied")]
+        public IActionResult AccessDenied()
+        {
+            _logger.LogWarning("Quyền truy cập bị từ chối: Người dùng đã cố gắng truy cập vào tài nguyên trái phép."); 
+            return Forbid("Bạn không có quyền truy cập tài nguyên này.");
         }
 
         /// <summary>
@@ -273,11 +318,12 @@ namespace QuanLyNguoiDungApi.Controllers
         /// </summary>
         /// <param name="claims">Danh sách các claims của người dùng.</param>
         /// <returns>Chuỗi JWT.</returns>
-        private string GenerateJwtToken(List<Claim> claims) // Đã sửa để nhận List<Claim>
+        private string GenerateJwtToken(List<Claim> claims)
         {
             var jwtKey = _configuration["Jwt:Key"];
             if (string.IsNullOrEmpty(jwtKey))
             {
+                _logger.LogError("JWT Key không được cấu hình trong appsettings.json."); // Ghi log lỗi: Key JWT không cấu hình
                 throw new InvalidOperationException("JWT Key không được cấu hình trong appsettings.json.");
             }
 
@@ -289,8 +335,8 @@ namespace QuanLyNguoiDungApi.Controllers
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(claims), // Sử dụng claims đã được truyền vào
-                Expires = DateTime.UtcNow.AddHours(1), // Token hết hạn sau 1 giờ
+                Subject = new ClaimsIdentity(claims), 
+                Expires = DateTime.UtcNow.AddMinutes(120), 
                 Issuer = issuer,
                 Audience = audience,
                 SigningCredentials = credentials
@@ -299,16 +345,6 @@ namespace QuanLyNguoiDungApi.Controllers
             var tokenHandler = new JwtSecurityTokenHandler();
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
-        }
-
-        /// <summary>
-        /// Endpoint để kiểm tra quyền truy cập khi bị từ chối.
-        /// </summary>
-        [HttpGet("accessdenied")]
-        public IActionResult AccessDenied()
-        {
-            // Trả về Forbid để báo hiệu rằng người dùng đã xác thực nhưng không có quyền.
-            return Forbid("Bạn không có quyền truy cập tài nguyên này.");
         }
     }
 }

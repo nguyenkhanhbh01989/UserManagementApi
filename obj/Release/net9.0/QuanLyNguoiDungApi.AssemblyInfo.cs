@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("QuanLyNguoiDungApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+78c147546137547d00b965f0d3491990d5232df6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a2f4ec6f7e67901b1b26ff0534e3d8fcad0fe03f")]
 [assembly: System.Reflection.AssemblyProductAttribute("QuanLyNguoiDungApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("QuanLyNguoiDungApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
